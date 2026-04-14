@@ -1,59 +1,69 @@
 # EventLens
 
-Event-driven image annotation and retrieval system.
+Event-driven image annotation and retrieval system with strict message contracts and Redis topic transport.
 
-## Overview
+## Project Structure
 
-This project builds a modular image-processing pipeline using pub-sub messaging.  
-Images are submitted as events, processed by services, stored in a document database, and indexed for similarity search.
+```text
+event_lens/
+  messaging/
+    bus.py           # In-memory deterministic pub/sub for unit tests
+    redis_bus.py     # Redis pub/sub transport (topics + JSON envelopes)
+  schemas/
+    topics.py        # Canonical topic names
+    events.py        # Event envelope contract
+    messages.py      # Topic-specific payload contracts
+  services/
+    pipeline.py      # Upload -> inference -> annotation -> embedding -> query flow
+tests/
+  test_events.py
+  test_message_contracts.py
+  test_pipeline_system.py
+```
 
-The focus is on **architecture, modular design, and testing**, not model training.
+## Event and Message Definitions
 
-## Components
+Each event uses one envelope schema:
 
-- CLI Service
-- Image Service
-- Inference Service
-- Document DB Service
-- Embedding Service
-- Vector Index Service
-- Messaging Layer
-- Event Generator
+```json
+{
+  "topic": "image.submitted",
+  "event_id": "uuid",
+  "timestamp": "ISO-8601 UTC",
+  "payload": {}
+}
+```
 
-## Event Topics
+Topic payload contracts:
 
-- `image.submitted`
-- `inference.completed`
-- `annotation.stored`
-- `embedding.created`
-- `annotation.corrected`
-- `query.submitted`
-- `query.completed`
+- `image.submitted`: `image_id`, `image_uri`, `submitted_by`
+- `inference.completed`: `image_id`, `model_version`, `objects[]`
+- `annotation.stored`: `image_id`, `annotation_id`, `objects[]`, `source_event_id`
+- `embedding.created`: `image_id`, `vector_id`, `dimensions`
+- `annotation.corrected`: `image_id`, `annotation_id`, `corrections[]`
+- `query.submitted`: `query_id`, `text`, `top_k`
+- `query.completed`: `query_id`, `results[]`
 
-## Design Rules
+## Redis Topics and Messaging
 
-- Services communicate through events
-- Each datastore is owned by one service only
-- CLI does not access databases directly
-- System must be modular and testable
+- Redis channels are exactly the topic names in `schemas/topics.py`.
+- Messages are published as JSON-serialized event envelopes.
+- `RedisBus` supports `publish`, `subscribe`, `start`, and `stop`.
+- `InMemoryBus` mirrors behavior for deterministic tests and fault-injection (`publish_raw`).
 
-## Testing Goals
+## Testing
 
-- Idempotency
-- Robustness
-- Eventual consistency
-- Accurate queries
+The test suite covers:
 
-Failure cases include duplicate, dropped, delayed events, and subscriber downtime.
+- Envelope validation and serialization.
+- Unit tests for all topic payload contracts.
+- End-to-end event-driven flow.
+- Idempotency for duplicate event IDs.
+- Malformed message dead-letter handling.
+- Annotation correction update + re-indexing path.
 
-## Tech Stack
+Run tests:
 
-- Redis Pub-Sub
-- Document DB
-- FAISS
-
-## Notes
-
-- Do not train models
-- Do not implement ANN algorithms
-- Focus on system integration and testing
+```bash
+python3 -m pytest -q
+```
