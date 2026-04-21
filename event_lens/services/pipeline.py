@@ -1,45 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
 from event_lens.messaging.bus import MessageBus
 from event_lens.schemas.events import EventEnvelope
 from event_lens.schemas.topics import Topic
-
-
-@dataclass
-class DocumentStore:
-    records: dict[str, dict[str, Any]] = field(default_factory=dict)
-
-    def upsert_annotation(self, image_id: str, annotation_id: str, objects: list[dict[str, Any]]) -> None:
-        self.records[image_id] = {
-            "annotation_id": annotation_id,
-            "objects": objects,
-        }
-
-
-@dataclass
-class VectorIndex:
-    vectors: dict[str, list[float]] = field(default_factory=dict)
-
-    def add(self, image_id: str, vector: list[float]) -> None:
-        self.vectors[image_id] = vector
-
-    def search(self, query_text: str, top_k: int) -> list[dict[str, Any]]:
-        # Keep this deterministic for tests; replace with FAISS later.
-        ordered = sorted(self.vectors.items(), key=lambda kv: kv[0])
-        return [
-            {"image_id": image_id, "score": float(len(query_text)) / (len(vector) or 1)}
-            for image_id, vector in ordered[:top_k]
-        ]
+from event_lens.services.document_db import InMemoryDocumentStore
+from event_lens.services.embedding import EmbeddingService
+from event_lens.services.inference import ImageInferenceService
+from event_lens.services.vector_index import InMemoryVectorIndex
 
 
 class EventPipeline:
-    def __init__(self, bus: MessageBus, document_store: DocumentStore, vector_index: VectorIndex) -> None:
+    def __init__(
+        self,
+        bus: MessageBus,
+        document_store: InMemoryDocumentStore | None = None,
+        vector_index: InMemoryVectorIndex | None = None,
+        inference_service: ImageInferenceService | None = None,
+        embedding_service: EmbeddingService | None = None,
+    ) -> None:
         self.bus = bus
-        self.document_store = document_store
-        self.vector_index = vector_index
+        self.document_store = document_store or InMemoryDocumentStore()
+        self.vector_index = vector_index or InMemoryVectorIndex()
+        self.inference_service = inference_service or ImageInferenceService()
+        self.embedding_service = embedding_service or EmbeddingService(dimensions=16)
         self.processed_event_ids: set[str] = set()
 
     def register(self) -> None:
@@ -62,14 +45,15 @@ class EventPipeline:
         if not self._once(event):
             return
         image_id = event.payload["image_id"]
-        objects = [{"label": "object", "confidence": 0.95, "bbox": [0, 0, 10, 10]}]
+        image_uri = event.payload["image_uri"]
+        inference = self.inference_service.infer(image_uri)
         self.bus.publish(
             EventEnvelope.create(
                 Topic.INFERENCE_COMPLETED,
                 {
                     "image_id": image_id,
-                    "model_version": "v0",
-                    "objects": objects,
+                    "model_version": inference.model_version,
+                    "objects": inference.objects,
                 },
             )
         )
@@ -97,15 +81,14 @@ class EventPipeline:
         if not self._once(event):
             return
         image_id = event.payload["image_id"]
-        # Deterministic placeholder embedding for testable behavior.
-        vector = [float((ord(c) % 10) / 10.0) for c in image_id][:8] or [0.0]
-        self.vector_index.add(image_id, vector)
+        vector = self.embedding_service.create_embedding(image_id, event.payload["objects"])
+        vector_id = self.vector_index.add(image_id, vector)
         self.bus.publish(
             EventEnvelope.create(
                 Topic.EMBEDDING_CREATED,
                 {
                     "image_id": image_id,
-                    "vector_id": f"vec-{image_id}",
+                    "vector_id": vector_id,
                     "dimensions": len(vector),
                 },
             )
@@ -116,7 +99,7 @@ class EventPipeline:
             return
         image_id = event.payload["image_id"]
         annotation_id = event.payload["annotation_id"]
-        base = self.document_store.records.get(image_id, {"objects": []})
+        base = self.document_store.get_annotation(image_id) or {"objects": []}
         corrected_objects = base["objects"] + event.payload["corrections"]
         self.document_store.upsert_annotation(image_id, annotation_id, corrected_objects)
         self.bus.publish(
@@ -137,7 +120,8 @@ class EventPipeline:
         query_id = event.payload["query_id"]
         text = event.payload["text"]
         top_k = event.payload["top_k"]
-        results = self.vector_index.search(text, top_k)
+        query_vector = self.embedding_service.create_embedding(image_id=f"query:{query_id}", objects=[{"text": text}])
+        results = self.vector_index.search(query_vector, top_k)
         # Query completion is published so CLI can stay decoupled from storage.
         self.bus.publish(
             EventEnvelope.create(

@@ -7,18 +7,23 @@ Event-driven image annotation and retrieval system with strict message contracts
 ```text
 event_lens/
   messaging/
-    bus.py           # In-memory deterministic pub/sub for unit tests
-    redis_bus.py     # Redis pub/sub transport (topics + JSON envelopes)
+    bus.py              # In-memory deterministic pub/sub for unit tests
+    redis_bus.py        # Redis pub/sub transport (topics + JSON envelopes)
   schemas/
-    topics.py        # Canonical topic names
-    events.py        # Event envelope contract
-    messages.py      # Topic-specific payload contracts
+    topics.py           # Canonical topic names
+    events.py           # Event envelope contract
+    messages.py         # Topic-specific payload contracts
   services/
-    pipeline.py      # Upload -> inference -> annotation -> embedding -> query flow
+    pipeline.py         # Upload -> inference -> annotation -> embedding -> query flow
+    inference.py        # Week-2 image inference service integration
+    document_db.py      # Week-2 document DB adapters (in-memory + MongoDB)
+    embedding.py        # Week-2 embedding generator service
+    vector_index.py     # Week-2 vector index adapters (in-memory + FAISS)
 tests/
   test_events.py
   test_message_contracts.py
   test_pipeline_system.py
+  test_week2_services.py
 ```
 
 ## Event and Message Definitions
@@ -51,6 +56,19 @@ Topic payload contracts:
 - `RedisBus` supports `publish`, `subscribe`, `start`, and `stop`.
 - `InMemoryBus` mirrors behavior for deterministic tests and fault-injection (`publish_raw`).
 
+## Week-2 Service Integrations
+
+- Inference: `ImageInferenceService` reads image metadata from local file/HTTP image URIs.
+- Document DB: `MongoDocumentStore` adapter available for real MongoDB persistence.
+- Embedding: `EmbeddingService` creates deterministic vector embeddings from annotations.
+- Vector DB: `FaissVectorIndex` adapter available for real FAISS similarity search.
+
+Install week-2 integrations:
+
+```bash
+python3 -m pip install -e '.[dev,week2]'
+```
+
 ## Testing
 
 The test suite covers:
@@ -61,6 +79,7 @@ The test suite covers:
 - Idempotency for duplicate event IDs.
 - Malformed message dead-letter handling.
 - Annotation correction update + re-indexing path.
+- Week-2 service behavior for inference, embedding, and vector search.
 
 Run tests:
 
