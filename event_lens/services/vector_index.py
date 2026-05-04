@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 class InMemoryVectorIndex:
@@ -24,9 +26,11 @@ class InMemoryVectorIndex:
 
 @dataclass
 class FaissVectorIndex:
-    """FAISS-backed vector index for week-2 integration."""
+    """FAISS-backed vector index for persistent similarity search."""
 
     dimensions: int
+    index_path: str | None = None
+    labels_path: str | None = None
     _labels: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -39,6 +43,8 @@ class FaissVectorIndex:
         self._faiss = faiss
         self._np = np
         self._index = faiss.IndexFlatIP(self.dimensions)
+        if self.index_path and self.labels_path:
+            self.load()
 
     def add(self, image_id: str, vector: list[float]) -> str:
         arr = self._np.array([_normalize(vector)], dtype="float32")
@@ -57,6 +63,26 @@ class FaissVectorIndex:
                 continue
             results.append({"image_id": self._labels[idx], "score": float(score)})
         return results
+
+    def save(self) -> None:
+        if not self.index_path or not self.labels_path:
+            raise ValueError("index_path and labels_path are required to save FAISS state")
+        index_path = Path(self.index_path)
+        labels_path = Path(self.labels_path)
+        index_path.parent.mkdir(parents=True, exist_ok=True)
+        labels_path.parent.mkdir(parents=True, exist_ok=True)
+        self._faiss.write_index(self._index, str(index_path))
+        labels_path.write_text(json.dumps(self._labels, indent=2), encoding="utf-8")
+
+    def load(self) -> None:
+        index_path = Path(self.index_path or "")
+        labels_path = Path(self.labels_path or "")
+        if not index_path.exists() or not labels_path.exists():
+            return
+        self._index = self._faiss.read_index(str(index_path))
+        self._labels = json.loads(labels_path.read_text(encoding="utf-8"))
+        if self._index.d != self.dimensions:
+            raise ValueError(f"FAISS index dimensions {self._index.d} do not match configured {self.dimensions}")
 
 
 def _normalize(vector: list[float]) -> list[float]:

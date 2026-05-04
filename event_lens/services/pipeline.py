@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from event_lens.messaging.bus import MessageBus
-from event_lens.schemas.events import EventEnvelope
-from event_lens.schemas.topics import Topic
+from event_lens.bus import MessageBus
+from event_lens.events import EventEnvelope
+from event_lens.events import Topic
 from event_lens.services.document_db import InMemoryDocumentStore
 from event_lens.services.embedding import EmbeddingService
 from event_lens.services.inference import ImageInferenceService

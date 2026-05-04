@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import threading
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Callable
 
-from event_lens.schemas.events import EventEnvelope
-from event_lens.schemas.messages import validate_payload
-from event_lens.schemas.topics import Topic
+from event_lens.events import EventEnvelope, EventValidationError, Topic, validate_payload
 
 try:
     import redis
@@ -17,8 +16,46 @@ except ImportError:  # pragma: no cover - exercised only when dependency missing
 Handler = Callable[[EventEnvelope], None]
 
 
-class RedisBus:
-    """Redis pub/sub topic bus using event envelopes as JSON messages."""
+class MessageBus(ABC):
+    @abstractmethod
+    def publish(self, event: EventEnvelope) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def subscribe(self, topic: Topic, handler: Handler) -> None:
+        raise NotImplementedError
+
+
+class InMemoryBus(MessageBus):
+    """Deterministic pub/sub bus for tests and local demos."""
+
+    def __init__(self) -> None:
+        self._subscribers: dict[Topic, list[Handler]] = defaultdict(list)
+        self.dead_letters: list[dict] = []
+
+    def publish(self, event: EventEnvelope) -> None:
+        event.validate()
+        validate_payload(event.topic, event.payload)
+        for handler in self._subscribers[event.topic]:
+            try:
+                handler(event)
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                self.dead_letters.append({"event": event.to_dict(), "error": str(exc)})
+
+    def subscribe(self, topic: Topic, handler: Handler) -> None:
+        self._subscribers[topic].append(handler)
+
+    def publish_raw(self, raw: dict) -> None:
+        """Simulate malformed external input in tests."""
+        try:
+            event = EventEnvelope.from_dict(raw)
+            self.publish(event)
+        except (EventValidationError, ValueError) as exc:
+            self.dead_letters.append({"event": raw, "error": str(exc)})
+
+
+class RedisBus(MessageBus):
+    """Redis pub/sub bus using topic names as channels."""
 
     def __init__(self, redis_url: str = "redis://localhost:6379/0") -> None:
         if redis is None:
@@ -36,7 +73,6 @@ class RedisBus:
 
     def subscribe(self, topic: Topic, handler: Handler) -> None:
         self._subscribers[topic].append(handler)
-        # Redis channel names are the same as our topic names.
         self._pubsub.subscribe(topic.value)
 
     def start(self) -> None:
@@ -54,7 +90,6 @@ class RedisBus:
 
     def _run_listener(self) -> None:
         while self._running:
-            # Poll in short intervals so stop() can shut down promptly.
             message = self._pubsub.get_message(timeout=0.5)
             if not message:
                 continue

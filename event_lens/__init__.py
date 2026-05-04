@@ -1,6 +1,5 @@
 """EventLens package."""
 
-from .schemas.events import EventEnvelope
-from .schemas.topics import Topic
+from .events import EventEnvelope, Topic
 
 __all__ = ["EventEnvelope", "Topic"]

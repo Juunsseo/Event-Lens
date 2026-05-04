@@ -1,7 +1,7 @@
 import pytest
 
-from event_lens.schemas.messages import MessageValidationError, validate_payload
-from event_lens.schemas.topics import Topic
+from event_lens.events import MessageValidationError, validate_payload
+from event_lens.events import Topic
 
 
 @pytest.mark.parametrize(

@@ -1,8 +1,8 @@
 import base64
 
-from event_lens.messaging.bus import InMemoryBus
-from event_lens.schemas.events import EventEnvelope
-from event_lens.schemas.topics import Topic
+from event_lens.bus import InMemoryBus
+from event_lens.events import EventEnvelope
+from event_lens.events import Topic
 from event_lens.services.pipeline import EventPipeline
 
 

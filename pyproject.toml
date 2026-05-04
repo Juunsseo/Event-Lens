@@ -11,17 +11,24 @@ dependencies = [
   "redis>=5.0.0",
 ]
 
+[project.scripts]
+event-lens = "event_lens.cli:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0",
 ]
-week2 = [
+integrations = [
   "pillow>=10.0.0",
   "pymongo>=4.8.0",
   "numpy>=1.26.0",
   "faiss-cpu>=1.8.0",
+  "openai>=1.50.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "integration: tests that require live external services",
+]

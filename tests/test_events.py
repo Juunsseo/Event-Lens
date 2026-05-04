@@ -1,7 +1,7 @@
 import pytest
 
-from event_lens.schemas.events import EventEnvelope, EventValidationError
-from event_lens.schemas.topics import Topic
+from event_lens.events import EventEnvelope, EventValidationError
+from event_lens.events import Topic
 
 
 def test_event_create_round_trip() -> None:
