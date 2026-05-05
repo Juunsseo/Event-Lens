@@ -1,5 +1,7 @@
 # EventLens
 
+[[![EventLens](http://img.youtube.com/vi/Do2oT4kDuxs/0.jpg)](http://www.youtube.com/watch?v=Do2oT4kDuxs)
+
 EventLens is an event-driven image annotation and retrieval system. It accepts image submissions, runs inference, stores annotations, builds embeddings, and answers similarity-style queries through strict message contracts.
 
 The default development path runs locally with in-memory storage. Optional adapters add Redis pub/sub, MongoDB persistence, OpenAI-backed image inference, and FAISS vector search.
