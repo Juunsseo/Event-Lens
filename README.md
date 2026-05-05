@@ -1,6 +1,7 @@
 # EventLens
 
 [![EventLens](http://img.youtube.com/vi/Do2oT4kDuxs/0.jpg)](http://www.youtube.com/watch?v=Do2oT4kDuxs)
+
 Click the thumbnail to pipeline explanation. Recommend using closed caption.
 
 EventLens is an event-driven image annotation and retrieval system. It accepts image submissions, runs inference, stores annotations, builds embeddings, and answers similarity-style queries through strict message contracts.
